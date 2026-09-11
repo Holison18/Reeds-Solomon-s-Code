@@ -29,7 +29,7 @@ pip install numpy Pillow matplotlib
 python reed_solomon.py
 ```
 
-This encodes a known QR data block, checks the computed parity bytes against the article's worked example, injects 5 random byte errors and recovers them, then repeats the exercise with 10 known erasures. Every step ends in an `assert`, so a silent, clean exit means everything checked out.
+This encodes a fixed 16-byte data block taken from a QR Reed-Solomon worked example (an arbitrary byte sequence used to verify the math, not a URL or a real scannable QR payload), checks the computed parity bytes against that example's known-correct values, injects 5 random byte errors and recovers them, then repeats the exercise with 10 known erasures. Every step ends in an `assert`, so a silent, clean exit means everything checked out.
 
 ### 2. The image corruption/recovery demo
 

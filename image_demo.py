@@ -4,9 +4,6 @@ raw bytes in RS(255, 255-nsym) blocks, corrupt the encoded stream (random
 byte noise plus a contiguous "scratch"), then reconstruct the image two
 ways -- naively (ignoring the parity, i.e. no error correction) and via
 rs_correct_msg -- so the difference is visible side by side.
-
-Usage:
-    python image_demo.py --image photo.jpg
 """
 
 import argparse
