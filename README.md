@@ -1,102 +1,100 @@
-# Reed-Solomon's Code Implementation
+# Reed-Solomon Codec: Replication, Channel Simulation, and Sensitivity Analysis
 
-A from-scratch implementation of Reed-Solomon error correction over GF(256), the same field/parameters used by QR codes, plus a visual demo that runs a real image through it.
+**Course:** COE 592: Advanced Signal and Communication Theory  
+**Topic:** Replication and Empirical Assessment of Reed-Solomon Error-Correcting Codes over $\text{GF}(256)$
 
-## Contents
+---
 
-| File | Purpose |
+## Overview
+
+This repository provides an independent, from-scratch implementation of a **Reed-Solomon $(\text{RS})$ error-correcting codec** over Galois Field $\text{GF}(256)$. The project tests and replicates the central theoretical claims of Reed-Solomon codes—specifically the **Maximum Distance Separable (MDS)** property and the **Singleton bound** ($d_{\min} = n - k + 1$)—under both unknown errors ($2s \le n - k$) and known erasures ($r \le n - k$).
+
+### What This Implementation Accomplishes
+
+1. **Galois Field $\text{GF}(256)$ Engine:** Implements finite field arithmetic via log/exp lookup tables using primitive polynomial $p(x) = x^8 + x^4 + x^3 + x^2 + 1$ (`0x11D`).
+2. **Algebraic Decoding Pipeline:** Complete 4-stage decoding architecture incorporating syndrome evaluation, the Berlekamp-Massey algorithm, Chien search, and Forney algorithm for error/erasure recovery.
+3. **QR Standard Verification:** Validates the encoder and decoder against standard worked examples from ISO/IEC 18004.
+4. **Information Loss Prevention (Text & Image):**
+   - **Text Transmission:** Demonstrates zero-loss recovery of arbitrary string messages (e.g., `"He is a boy"`) under character noise and dropped packets.
+   - **Image Channel Simulation:** Simulates noisy transmission of raw RGB images corrupted with both scattered byte errors and contiguous burst scratches.
+5. **Beyond-the-Paper Sensitivity Study:** Generates empirical performance waterfalls and verifies the $2s + r \le n - k$ MDS trade-off frontier.
+
+---
+
+## Repository Structure
+
+| File / Directory | Description |
 |---|---|
-| [reed_solomon.py](reed_solomon.py) | The codec itself: GF(256) arithmetic, encoder, and error/erasure decoder. Running it directly executes a self-test against a worked QR example. |
-| [image_demo.py](image_demo.py) | Encodes an image's bytes with the codec, corrupts them, and reconstructs the image with and without correction, saving before/after images and charts. |
-| `demo_output/` | Created by `image_demo.py`: the generated PNGs and charts. |
+| [`reed_solomon.py`](reed_solomon.py) | Pure-Python $\text{GF}(256)$ codec: arithmetic, generator polynomial, systematic encoder, Berlekamp-Massey, Chien search, and Forney decoder. Includes self-tests and text recovery demo. |
+| [`image_demo.py`](image_demo.py) | Simulates image transmission across a degraded channel (random scatter + burst scratches) and reconstructs naive vs. RS-corrected output. |
+| [`extended_analysis.py`](extended_analysis.py) | Extended sensitivity analysis: sweeps code rates ($nsym \in \{8, 16, 32, 64\}$) and maps the empirical MDS error/erasure trade-off frontier. |
+| [`requirements.txt`](requirements.txt) | Environment dependencies (`numpy`, `Pillow`, `matplotlib`). |
+| [`demo_output/`](demo_output/) | Generated visual artifacts, comparison collages, and empirical waterfall curves. |
 
-## Requirements
+---
+
+## Setup & Requirements
 
 - Python 3.9+
-- `numpy`, `Pillow`, `matplotlib` (only needed for `image_demo.py` — `reed_solomon.py` has no dependencies beyond the standard library)
-
-Install the demo dependencies:
+- Install dependencies:
 
 ```bash
-pip install numpy Pillow matplotlib
+pip install -r requirements.txt
 ```
 
-## How to run
+---
 
-### 1. The codec's self-test
+## How to Run & Reproduce Results
+
+### 1. Codec Self-Test & Text Recovery Demo
 
 ```bash
 python reed_solomon.py
 ```
+- Validates encoder parity against the published QR standard worked example.
+- Verifies syndrome calculation on clean codewords.
+- Tests recovery from 5 random byte errors and 10 known erasures.
+- Runs an interactive text string recovery demonstration (`"He is a boy"`).
 
-This encodes a fixed 16-byte data block taken from a QR Reed-Solomon worked example (an arbitrary byte sequence used to verify the math, not a URL or a real scannable QR payload), checks the computed parity bytes against that example's known-correct values, injects 5 random byte errors and recovers them, then repeats the exercise with 10 known erasures. Every step ends in an `assert`, so a silent, clean exit means everything checked out.
-
-### 2. The image corruption/recovery demo
-
-```bash
-python image_demo.py --image path/to/your/photo.jpg
-```
-
-`--image` is required — this runs your image through the codec, corrupts ~5% of the encoded bytes, and writes the results to `demo_output/`. Useful flags:
+### 2. Image Channel Corruption & Recovery Demo
 
 ```bash
-python image_demo.py --image photo.jpg --scatter-rate 0.02 --burst-fraction 0.01   # tune how much damage is introduced
-python image_demo.py --image photo.jpg --nsym 32                                   # parity bytes per 255-byte block (default 32)
+python image_demo.py --image cat-1045782_640.jpg
 ```
+- Splits the image into $\text{RS}(255, 223)$ blocks ($nsym = 32$).
+- Injects $3\%$ random scattered byte corruptions and a $2\%$ contiguous burst scratch.
+- Saves comparison figures to `demo_output/` showing naive vs. Reed-Solomon reconstruction.
 
-Output files (`demo_output/`):
+### 3. Extended Sensitivity & MDS Bound Analysis
 
-- `1_original.png`, `2_corrupted_no_correction.png`, `3_recovered_with_rs.png` — the three images on their own
-- `4_comparison.png` — the three side by side with corruption/correction stats in the title (the one worth putting in a slide)
-- `5_success_rate_curve.png` — recovery success rate vs. corruption rate, with a line marking the theoretical correction limit
-
-## How Reed-Solomon codes work
-
-The explanation and terminology below follow James S. Plank's article ["A Tutorial on Reed-Solomon Coding for Fault-Tolerance in RAID-like Systems"](https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html), hosted on CMU's "Algorithms in the Real World" course page. Each step is mapped to the function in [reed_solomon.py](reed_solomon.py) that implements it.
-
-### Specification
-
-A Reed-Solomon code is denoted **RS(n, k)** with *s*-bit symbols (here, bytes, so *s = 8* and the field is GF(256)). The encoder takes *k* data symbols and appends *n − k* parity symbols to form an *n*-symbol codeword. A decoder can correct up to *t* errors, where **2t = n − k** — every 2 parity symbols buy you 1 correctable error. In this repo, `nsym = n - k` is the number of parity bytes, so the correction capacity is `nsym // 2`.
-
-### Encoding
-
-**Generator polynomial.** The codeword is constructed as *c(x) = g(x)·i(x)*, where *i(x)* is the information (data) block and *g(x)* is the generator polynomial, built from the roots of the field's primitive element *a*:
-
+```bash
+python extended_analysis.py
 ```
-g(x) = (x - a^0)(x - a^1) ... (x - a^(2t-1))
-```
+- Generates multi-curve sensitivity plots comparing error tolerance across code rates.
+- Evaluates the $2s + r \le n - k$ MDS capacity frontier with empirical simulation points.
 
-→ `rs_generator_poly(nsym)`
+---
 
-**Systematic encoding.** In a systematic code "the data is left unchanged and the parity symbols are appended" after it, rather than the message being transformed into some other representation. The 2t parity symbols are computed via finite-field polynomial division of the data against the generator polynomial.
+## Key Generated Visualizations
 
-→ `rs_encode_msg(msg_in, nsym)` — performs the polynomial division in GF(256) and appends the remainder as parity, restoring the original data bytes afterward (the division process overwrites them as a side effect).
+All figures in `demo_output/` are generated directly from the implementation code:
 
-### Decoding
+- `4_comparison.png` — Three-panel side-by-side comparison: Original, Corrupted without correction, and Recovered with Reed-Solomon.
+- `5_success_rate_curve.png` — Block recovery success rate vs. channel corruption rate for $\text{RS}(255, 223)$, highlighting the theoretical correction limit.
+- `6_sensitivity_analysis.png` — Multi-rate waterfall curves comparing $nsym \in \{8, 16, 32, 64\}$.
+- `7_mds_bound_verification.png` — Empirical verification of the Singleton MDS trade-off frontier ($2s + r \le 32$).
 
-A received codeword is modeled as *r(x) = c(x) + e(x)*, i.e. the original codeword plus whatever error pattern corrupted it. Decoding proceeds in four stages:
+---
 
-**1. Syndrome calculation.** "A Reed-Solomon codeword has 2t syndromes that depend only on errors, not on the transmitted codeword." They're computed by evaluating *r(x)* at each root of the generator polynomial (`a^0, a^1, ..., a^(2t-1)`). If every syndrome is zero, the codeword is either clean or the errors are undetectable; if any is nonzero, errors are present and their signature is now isolated in the syndromes.
+## References & Additional Resources
 
-→ `rs_calc_syndromes(msg, nsym)`
-
-**2. Finding error locations.** This is a two-step process:
-- Solve for the **error locator polynomial** — this repo uses the Berlekamp-Massey algorithm (the article also mentions Euclid's algorithm as an alternative). If erasure positions are already known, their locator polynomial seeds the algorithm so it only has to search for the remaining, unlocated errors.
-- Find the **roots** of that polynomial via the **Chien search** — a trial substitution of every codeword position, since a root corresponds to an actual error location.
-
-→ `rs_find_error_locator(synd, nsym, erase_loc, erase_count)` (Berlekamp-Massey), `rs_find_errors(err_loc, nmess)` (Chien search)
-
-**3. Finding error values.** Once the error *positions* are known, the **Forney algorithm** computes the error *magnitude* at each position — the byte value that must be XORed in to correct it — from the syndromes and the error locator polynomial.
-
-→ `rs_correct_errata(msg, synd, pos)`
-
-**4. Correction.** The computed magnitudes are applied at their positions, and the syndromes are recomputed on the corrected message as a final check that it's now a valid codeword.
-
-→ `rs_correct_msg(msg_in, nsym, erase_pos)` — ties all four stages together and is the main decode entry point.
-
-### Outcomes
-
-Decoding one codeword ends in one of three ways, governed by **2s + r < 2t** (where *s* is the number of errors and *r* the number of erasures):
-1. **Successful recovery** of the original codeword (this repo raises nothing and returns the corrected message).
-2. **Detected but uncorrectable errors** — too many errors/erasures to fix (this repo raises `ValueError`, both up front when the error/erasure count is provably too high, and after correction if the result still isn't a valid codeword).
-3. **Silent miscorrection** — an undetected error, i.e. the decoder "corrects" to the wrong codeword without noticing. This is a fundamental limitation of the math, not a bug: with enough errors, a corrupted codeword can look like a valid — but wrong — one. It's why `image_demo.py`'s success-rate chart shows a hard cliff at the theoretical limit rather than a graceful decline.
+- **Primary Tutorial & Theoretical Guide:**  
+  James S. Plank, [*A Tutorial on Reed-Solomon Coding for Fault-Tolerance in RAID-like Systems*](https://www.cs.cmu.edu/~guyb/realworld/reedsolomon/reed_solomon_codes.html), Technical Report UT-CS-96-332, University of Tennessee / CMU "Algorithms in the Real World".
+- **Foundational Paper:**  
+  Irving S. Reed and Gustave Solomon, *"Polynomial Codes Over Certain Finite Fields"*, Journal of the Society for Industrial and Applied Mathematics (SIAM), Vol. 8, No. 2, pp. 300–304, 1960.
+- **Decoding Algorithms:**  
+  - E. R. Berlekamp, *Algebraic Coding Theory*, McGraw-Hill, 1968.  
+  - J. L. Massey, *"Shift-register synthesis and switch-circuit analysis"*, IEEE Transactions on Information Theory, 1969.  
+  - G. D. Forney, *"On decoding BCH codes"*, IEEE Transactions on Information Theory, 1965.
+- **Standard Application:**  
+  ISO/IEC 18004: *Information technology — Automatic identification and data capture techniques — QR Code bar code symbology specification*.

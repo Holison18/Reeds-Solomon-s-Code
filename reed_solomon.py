@@ -258,7 +258,74 @@ def rs_correct_msg(msg_in: List[int], nsym: int,
     return msg_out
 
 
-# Texting
+# Demonstration with text messages (e.g., "He is a boy")
+
+
+def demo_text_message(text: str = "He is a boy", nsym: int = 8):
+    """Demonstrates how Reed-Solomon encodes a plain text string, withstands
+    corruptions (errors and erasures), and prevents information loss."""
+    print("=" * 65)
+    print(f"Reed-Solomon Text Demonstration: \"{text}\"")
+    print("=" * 65)
+
+    data_bytes = list(text.encode("utf-8"))
+    max_errors = nsym // 2
+    max_erasures = nsym
+
+    print(f"Original Text:      '{text}'")
+    print(f"Data Bytes:         {data_bytes} (length: {len(data_bytes)})")
+    print(f"Parity Symbols:     {nsym} symbols")
+    print(f"Protection:         Can correct up to {max_errors} unknown error(s) OR {max_erasures} known erasure(s)\n")
+
+    # 1. Encode message
+    codeword = rs_encode_msg(data_bytes, nsym)
+    parity_bytes = codeword[len(data_bytes):]
+    print(f"Encoded Codeword:   {codeword}")
+    print(f"Parity Bytes:       {parity_bytes}\n")
+
+    # 2. Unknown Errors Simulation (noise / data corruption)
+    damaged = list(codeword)
+    # Corrupt characters in the text (e.g. index 1: 'e' -> '?', index 4: 's' -> 'X', index 9: 'o' -> '0')
+    error_positions = [1, 4, 9][:max_errors]
+    corrupt_chars = ['?', 'X', '0']
+    for idx, pos in enumerate(error_positions):
+        damaged[pos] = ord(corrupt_chars[idx])
+
+    corrupted_text = bytes(damaged[:len(data_bytes)]).decode("utf-8", errors="replace")
+    print("--- Simulation 1: Unknown Errors (Corruption) ---")
+    print(f"Corrupted Text:     '{corrupted_text}' (errors introduced at indices {error_positions})")
+    print(f"Corrupted Bytes:    {damaged}")
+
+    # Correct without knowing error positions
+    recovered_codeword = rs_correct_msg(damaged, nsym)
+    recovered_data = recovered_codeword[:len(data_bytes)]
+    recovered_text = bytes(recovered_data).decode("utf-8", errors="replace")
+
+    print(f"Recovered Text:     '{recovered_text}'")
+    assert recovered_text == text, "Failed to recover from errors!"
+    print("Result:             SUCCESS - Original message restored with zero information loss!\n")
+
+    # 3. Known Erasures Simulation (packet loss / missing bytes)
+    erased = list(codeword)
+    erasure_positions = [0, 3, 6, 8]  # positions where characters were completely lost
+    for p in erasure_positions:
+        erased[p] = 0
+
+    erased_display = "".join(chr(erased[i]) if i not in erasure_positions else "_" for i in range(len(data_bytes)))
+    print("--- Simulation 2: Erasures (Lost / Missing Bytes) ---")
+    print(f"Received Text:      '{erased_display}' (bytes lost at indices {erasure_positions})")
+
+    recovered_erased_codeword = rs_correct_msg(erased, nsym, erase_pos=erasure_positions)
+    recovered_erased_data = recovered_erased_codeword[:len(data_bytes)]
+    recovered_erased_text = bytes(recovered_erased_data).decode("utf-8", errors="replace")
+
+    print(f"Recovered Text:     '{recovered_erased_text}'")
+    assert recovered_erased_text == text, "Failed to recover from erasures!"
+    print("Result:             SUCCESS - Missing characters completely reconstructed from parity!\n")
+    print("=" * 65 + "\n")
+
+
+# Testing
 # using the QR sample message and its known parity bytes.
 
 
@@ -299,4 +366,8 @@ if __name__ == "__main__":
     erased_clean = [0 if v < 0 else v for v in erased]
     recovered2 = rs_correct_msg(erased_clean, nsym, erase_pos=erase_positions)
     assert recovered2 == encoded, "failed to recover from erasures"
-    print(f"erasure correction ({nsym} known positions): OK, message fully recovered")
+    print(f"erasure correction ({nsym} known positions): OK, message fully recovered\n")
+
+    # Run the text demonstration
+    demo_text_message("He is a boy", nsym=8)
+
